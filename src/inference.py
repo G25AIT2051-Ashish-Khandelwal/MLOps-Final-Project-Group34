@@ -7,8 +7,9 @@ INPUT_TEXT = os.environ.get("INPUT_TEXT", "This movie was great!")
 
 
 def load_model(model_name):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    token = os.environ.get("HF_TOKEN", None)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=token)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, token=token)
     model.eval()
     return tokenizer, model
 
