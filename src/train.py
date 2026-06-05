@@ -14,7 +14,7 @@ from transformers import (
 from huggingface_hub import login
 
 MODEL_NAME = "distilbert-base-uncased"
-HF_REPO = "your-username/your-model-repo"
+HF_REPO = "somnathchakraborty/distilbert-imdb-sentiment"
 
 
 def load_secrets():

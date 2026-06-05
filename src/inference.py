@@ -2,7 +2,7 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-HF_MODEL_NAME = os.environ.get("HF_MODEL_NAME", "your-username/your-model-repo")
+HF_MODEL_NAME = os.environ.get("HF_MODEL_NAME", "somnathchakraborty/distilbert-imdb-sentiment")
 INPUT_TEXT = os.environ.get("INPUT_TEXT", "This movie was great!")
 
 

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ARG HF_MODEL_NAME=your-username/your-model-repo
+ARG HF_MODEL_NAME=somnathchakraborty/distilbert-imdb-sentiment
 ENV HF_MODEL_NAME=${HF_MODEL_NAME}
 
 COPY requirements-inference.txt .
