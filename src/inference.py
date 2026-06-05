@@ -16,6 +16,7 @@ def load_model(model_name):
 
 def predict(text, tokenizer, model):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    inputs.pop("token_type_ids", None)
 
     with torch.no_grad():
         outputs = model(**inputs)
