@@ -1,36 +1,40 @@
 import os
-import json
-import logging
 import numpy as np
 import pandas as pd
-
-import torch
 import wandb
+import torch
 from datasets import Dataset
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer,
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from huggingface_hub import login
 
 MODEL_NAME = "distilbert-base-uncased"
-OUTPUT_DIR = "models"
-DATA_DIR = "data"
+HF_REPO = "your-username/your-model-repo"
 
 
-def load_data(data_dir: str = DATA_DIR):
-    train_df = pd.read_csv(f"{data_dir}/train_clean.csv")
-    test_df = pd.read_csv(f"{data_dir}/test_clean.csv")
-    logger.info(f"Train: {len(train_df)}, Test: {len(test_df)}")
+def load_secrets():
+    try:
+        from kaggle_secrets import UserSecretsClient
+        secrets = UserSecretsClient()
+        os.environ["WANDB_API_KEY"] = secrets.get_secret("WANDB_API_KEY")
+        login(token=secrets.get_secret("HF_TOKEN"))
+    except ImportError:
+        login(token=os.environ.get("HF_TOKEN", ""))
+    wandb.login()
+
+
+def load_data():
+    train_df = pd.read_csv("data/train_clean.csv")
+    test_df = pd.read_csv("data/test_clean.csv")
     return train_df, test_df
 
 
-def tokenize_data(df: pd.DataFrame, tokenizer, max_length: int = 512):
+def tokenize_data(df, tokenizer, max_length=512):
     encodings = tokenizer(
         df["text"].tolist(),
         truncation=True,
@@ -46,59 +50,41 @@ def tokenize_data(df: pd.DataFrame, tokenizer, max_length: int = 512):
     return dataset
 
 
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred
-    predictions = np.argmax(predictions, axis=1)
-
-    accuracy = accuracy_score(labels, predictions)
-    precision = precision_score(labels, predictions, average="weighted")
-    recall = recall_score(labels, predictions, average="weighted")
-    f1 = f1_score(labels, predictions, average="weighted")
-
+def compute_metrics(pred):
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
     return {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
+        "accuracy": accuracy_score(labels, preds),
+        "f1": f1_score(labels, preds, average="weighted"),
     }
 
 
-def train_model(train_df, test_df, epochs=3, batch_size=16, learning_rate=2e-5, wandb_project="mlops-group34"):
+def train_version(train_dataset, test_dataset, model, tokenizer, version_config):
     wandb.init(
-        project=wandb_project,
-        name="imdb-sentiment-distilbert",
+        project="mlops-group34",
+        name=f"run-{version_config['version']}",
         config={
             "model": MODEL_NAME,
-            "epochs": epochs,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "train_samples": len(train_df),
-            "test_samples": len(test_df),
+            "epochs": version_config["epochs"],
+            "batch_size": version_config["batch_size"],
+            "learning_rate": version_config["learning_rate"],
+            "version": version_config["version"],
+            "platform": "Kaggle",
         },
     )
 
-    logger.info(f"Loading {MODEL_NAME}...")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
-
-    logger.info("Tokenizing data...")
-    train_dataset = tokenize_data(train_df, tokenizer)
-    test_dataset = tokenize_data(test_df, tokenizer)
-
     training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
-        num_train_epochs=epochs,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        learning_rate=learning_rate,
-        warmup_steps=100,
-        weight_decay=0.01,
-        logging_steps=50,
-        evaluation_strategy="epoch",
+        output_dir="./results",
+        num_train_epochs=version_config["epochs"],
+        per_device_train_batch_size=version_config["batch_size"],
+        eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
-        report_to=["wandb"],
-        push_to_hub=False,
+        report_to="wandb",
+        run_name=f"run-{version_config['version']}",
+        learning_rate=version_config["learning_rate"],
+        weight_decay=version_config.get("weight_decay", 0.01),
+        warmup_steps=version_config.get("warmup_steps", 100),
     )
 
     trainer = Trainer(
@@ -109,28 +95,55 @@ def train_model(train_df, test_df, epochs=3, batch_size=16, learning_rate=2e-5, 
         compute_metrics=compute_metrics,
     )
 
-    logger.info("Starting training...")
     trainer.train()
 
-    best_model_path = f"{OUTPUT_DIR}/best_model"
-    model.save_pretrained(best_model_path)
-    tokenizer.save_pretrained(best_model_path)
-    logger.info(f"Model saved to {best_model_path}")
-
-    final_metrics = trainer.evaluate()
-    logger.info(f"Final metrics: {final_metrics}")
-    wandb.log({"final_metrics": final_metrics})
-
-    wandb.finish()
+    return trainer
 
 
 if __name__ == "__main__":
+    load_secrets()
+
     train_df, test_df = load_data()
-    train_model(
-        train_df=train_df,
-        test_df=test_df,
-        epochs=3,
-        batch_size=16,
-        learning_rate=2e-5,
-        wandb_project="mlops-group34",
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    train_dataset = tokenize_data(train_df, tokenizer)
+    test_dataset = tokenize_data(test_df, tokenizer)
+
+    v1_config = {
+        "version": "v1",
+        "epochs": 3,
+        "batch_size": 16,
+        "learning_rate": 2e-5,
+        "weight_decay": 0.01,
+        "warmup_steps": 100,
+    }
+
+    model_v1 = AutoModelForSequenceClassification.from_pretrained(
+        MODEL_NAME, num_labels=2
     )
+    trainer_v1 = train_version(train_dataset, test_dataset, model_v1, tokenizer, v1_config)
+    wandb.finish()
+
+    v2_config = {
+        "version": "v2",
+        "epochs": 4,
+        "batch_size": 32,
+        "learning_rate": 5e-5,
+        "weight_decay": 0.02,
+        "warmup_steps": 50,
+    }
+
+    model_v2 = AutoModelForSequenceClassification.from_pretrained(
+        MODEL_NAME, num_labels=2
+    )
+    trainer_v2 = train_version(train_dataset, test_dataset, model_v2, tokenizer, v2_config)
+
+    best_trainer = trainer_v2
+    best_trainer.model.push_to_hub(HF_REPO)
+    tokenizer.push_to_hub(HF_REPO)
+
+    hf_url = f"https://huggingface.co/{HF_REPO}"
+    wandb.run.summary["huggingface_model"] = hf_url
+    print(f"Model pushed to: {hf_url}")
+
+    wandb.finish()

@@ -1,73 +1,45 @@
-import json
-import logging
-from typing import List, Dict
-
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+HF_MODEL_NAME = os.environ.get("HF_MODEL_NAME", "your-username/your-model-repo")
+INPUT_TEXT = os.environ.get("INPUT_TEXT", "This movie was great!")
 
 
-class SentimentClassifier:
-    def __init__(self, model_path: str = "models/best_model"):
-        logger.info(f"Loading model from {model_path}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_path)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
-        self.model.eval()
-
-        with open("id2label.json") as f:
-            self.id2label = json.load(f)
-
-    def predict(self, texts: List[str]) -> List[Dict]:
-        results = []
-
-        for text in texts:
-            inputs = self.tokenizer(
-                text,
-                truncation=True,
-                padding=True,
-                max_length=512,
-                return_tensors="pt",
-            )
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                logits = outputs.logits
-                probabilities = torch.softmax(logits, dim=1)[0].cpu().numpy()
-                prediction_id = torch.argmax(logits, dim=1).item()
-
-            results.append({
-                "text": text,
-                "prediction": self.id2label[str(prediction_id)],
-                "confidence": float(probabilities[prediction_id]),
-                "probabilities": {
-                    self.id2label[str(i)]: float(probabilities[i])
-                    for i in range(len(probabilities))
-                },
-            })
-
-        return results
+def load_model(model_name):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    model.eval()
+    return tokenizer, model
 
 
-def batch_inference(texts: List[str]) -> List[Dict]:
-    classifier = SentimentClassifier()
-    return classifier.predict(texts)
+def predict(text, tokenizer, model):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        probs = torch.softmax(outputs.logits, dim=1)[0]
+        pred_id = torch.argmax(probs).item()
+
+    id2label = model.config.id2label
+    label = id2label[pred_id]
+    confidence = probs[pred_id].item()
+
+    return {
+        "text": text,
+        "label": label,
+        "confidence": round(confidence, 4),
+        "probabilities": {id2label[i]: round(probs[i].item(), 4) for i in range(len(probs))}
+    }
 
 
 if __name__ == "__main__":
-    test_texts = [
-        "This movie was absolutely amazing! I loved every second of it.",
-        "Terrible film. Complete waste of time and money.",
-    ]
+    print(f"Loading model: {HF_MODEL_NAME}")
+    tokenizer, model = load_model(HF_MODEL_NAME)
 
-    classifier = SentimentClassifier()
-    results = classifier.predict(test_texts)
+    print(f"Input text: {INPUT_TEXT}")
+    result = predict(INPUT_TEXT, tokenizer, model)
 
-    for result in results:
-        print(f"\nText: {result['text'][:50]}...")
-        print(f"Prediction: {result['prediction']}")
-        print(f"Confidence: {result['confidence']:.4f}")
+    print(f"\nPrediction: {result['label']}")
+    print(f"Confidence: {result['confidence']}")
+    print(f"Probabilities: {result['probabilities']}")
