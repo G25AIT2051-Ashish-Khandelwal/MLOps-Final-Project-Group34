@@ -1,1 +1,54 @@
-# Inference workflow
+name: Inference Pipeline
+
+on:
+  push:
+    branches: [ main, somnath ]
+    paths:
+      - 'src/inference.py'
+      - 'models/**'
+  workflow_dispatch:
+
+jobs:
+  inference:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Check if model exists
+      id: check-model
+      run: |
+        if [ -d "models/best_model" ]; then
+          echo "MODEL_EXISTS=true" >> $GITHUB_OUTPUT
+        else
+          echo "MODEL_EXISTS=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run inference tests
+      if: steps.check-model.outputs.MODEL_EXISTS == 'true'
+      run: |
+        python src/inference.py
+
+    - name: Upload inference results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: inference-results
+        path: |
+          models/
+        retention-days: 7
+
+    - name: Log inference status
+      run: |
+        echo "Inference pipeline completed successfully"
+        echo "Check artifacts for results"
