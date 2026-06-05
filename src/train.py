@@ -61,7 +61,6 @@ def compute_metrics(pred):
 def train_version(train_dataset, test_dataset, model, tokenizer, version_config):
     wandb.init(
         project="mlops-group34",
-        entity="somnath_chakraborty-indian-institute-of-technology-jodhpur",
         name=f"run-{version_config['version']}",
         config={
             "model": MODEL_NAME,
