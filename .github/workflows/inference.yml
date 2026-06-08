@@ -1,1 +1,31 @@
-# Inference workflow
+name: Inference
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_text:
+        description: 'Text to classify'
+        required: true
+        default: 'This movie was fantastic!'
+
+jobs:
+  infer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run inference
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          INPUT_TEXT: ${{ github.event.inputs.input_text }}
+          HF_MODEL_NAME: ashishk-G25AIT2051/MLOps_Final_Group_34
+        run: python src/inference.py
