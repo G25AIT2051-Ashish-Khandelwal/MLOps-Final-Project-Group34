@@ -2,46 +2,26 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-HF_MODEL_NAME = os.environ.get("HF_MODEL_NAME", "somnathchakraborty/distilbert-imdb-sentiment")
-INPUT_TEXT = os.environ.get("INPUT_TEXT", "This movie was great!")
+HF_MODEL = os.environ.get("HF_MODEL_NAME", "ashishk-G25AIT2051/MLOps_Final_Group_34")
+INPUT = os.environ.get("INPUT_TEXT", "This movie was absolutely amazing!")
+HF_TOKEN = os.environ.get("HF_TOKEN", None)
 
+print(f"Model  : {HF_MODEL}")
+print(f"Input  : {INPUT}")
+print("Loading model...")
 
-def load_model(model_name):
-    token = os.environ.get("HF_TOKEN", None)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=token)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, token=token)
-    model.eval()
-    return tokenizer, model
+tokenizer = AutoTokenizer.from_pretrained(HF_MODEL, token=HF_TOKEN)
+model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL, token=HF_TOKEN)
+model.eval()
 
+inputs = tokenizer(INPUT, return_tensors="pt", truncation=True, max_length=512)
+inputs.pop("token_type_ids", None)
 
-def predict(text, tokenizer, model):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
-    inputs.pop("token_type_ids", None)
+with torch.no_grad():
+    outputs = model(**inputs)
 
-    with torch.no_grad():
-        outputs = model(**inputs)
-        probs = torch.softmax(outputs.logits, dim=1)[0]
-        pred_id = torch.argmax(probs).item()
+predicted_id = outputs.logits.argmax(-1).item()
+predicted_label = model.config.id2label[predicted_id]
+confidence = torch.softmax(outputs.logits, dim=-1)[0][predicted_id].item()
 
-    id2label = model.config.id2label
-    label = id2label[pred_id]
-    confidence = probs[pred_id].item()
-
-    return {
-        "text": text,
-        "label": label,
-        "confidence": round(confidence, 4),
-        "probabilities": {id2label[i]: round(probs[i].item(), 4) for i in range(len(probs))}
-    }
-
-
-if __name__ == "__main__":
-    print(f"Loading model: {HF_MODEL_NAME}")
-    tokenizer, model = load_model(HF_MODEL_NAME)
-
-    print(f"Input text: {INPUT_TEXT}")
-    result = predict(INPUT_TEXT, tokenizer, model)
-
-    print(f"\nPrediction: {result['label']}")
-    print(f"Confidence: {result['confidence']}")
-    print(f"Probabilities: {result['probabilities']}")
+print(f"\nResult : {predicted_label} (confidence: {confidence:.4f})")

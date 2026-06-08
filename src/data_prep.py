@@ -1,12 +1,29 @@
+"""
+Data Preparation Script
+Downloads, cleans, and saves the IMDb sentiment dataset.
+Run this once on your local machine.
+"""
+
 import os
 import re
 import json
+import re
+
 from datasets import load_dataset
+
+
+def clean_text(text):
+    """Remove HTML tags and extra whitespace."""
+    text = re.sub(r'<.*?>', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 
 print("Loading IMDb dataset from Hugging Face...")
 dataset = load_dataset("stanfordnlp/imdb")
 
-print(f"\nTrain samples : {len(dataset['train'])}")
+print("\n=== RAW DATA INSPECTION ===")
+print(f"Train samples : {len(dataset['train'])}")
 print(f"Test  samples : {len(dataset['test'])}")
 print(f"Features      : {dataset['train'].features}")
 print(f"\nFirst sample  :\n{dataset['train'][0]}")
@@ -14,12 +31,7 @@ print(f"\nFirst sample  :\n{dataset['train'][0]}")
 train_df = dataset['train'].to_pandas()
 print(f"\nClass distribution (train):\n{train_df['label'].value_counts()}")
 
-
-def clean_text(text):
-    text = re.sub(r'<.*?>', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
+print("\n=== CLEANING ===")
 
 train_df['text'] = train_df['text'].apply(clean_text)
 train_df = train_df.sample(n=5000, random_state=42).reset_index(drop=True)
@@ -33,7 +45,6 @@ test_df['text'] = test_df['text'].apply(clean_text)
 test_df = test_df.sample(n=1000, random_state=42).reset_index(drop=True)
 
 id2label = {0: "negative", 1: "positive"}
-label2id = {"negative": 0, "positive": 1}
 
 with open("id2label.json", "w") as f:
     json.dump(id2label, f, indent=2)
