@@ -7,7 +7,6 @@ Run this once on your local machine.
 import os
 import re
 import json
-import re
 
 from datasets import load_dataset
 
