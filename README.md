@@ -100,16 +100,6 @@ docker run --rm -e HF_TOKEN=your_token -e INPUT_TEXT="Great film" somnchak/mlops
 
 Go to Actions > Inference > Run workflow > enter text to classify.
 
-## Experiment Results
-
-| Config | V1 | V2 |
-|--------|-----|-----|
-| Epochs | 3 | 4 |
-| Batch Size | 16 | 32 |
-| Learning Rate | 2e-5 | 5e-5 |
-| **Accuracy** | 0.8950 | **0.9060** |
-| **F1 Score** | 0.8948 | **0.9060** |
-| **Loss** | 0.5752 | **0.5129** |
 
 ## Model
 
